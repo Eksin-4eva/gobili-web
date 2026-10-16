@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { Link, useLocation, useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import CommentList from "@/components/CommentList";
+import UserMeta from "@/components/UserMeta";
 import EmptyState from "@/components/EmptyState";
 import PageLoading from "@/components/PageLoading";
 import { getFeed, getPopular, visitVideo } from "@/api/video";
@@ -79,11 +80,9 @@ export default function VideoDetailPage() {
         <CommentList videoId={video.id} />
       </div>
       <aside className="space-y-3">
-        <div className="rounded-xl border border-border p-4">
+        <div className="rounded-xl border border-border p-4 space-y-3">
           <p className="text-sm text-muted-foreground">作者</p>
-          <Link className="mt-1 inline-flex text-sm font-medium text-primary" to={`/user/${video.user_id}`}>
-            查看用户主页
-          </Link>
+          <UserMeta userId={video.user_id} />
         </div>
       </aside>
     </div>

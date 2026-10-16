@@ -26,29 +26,34 @@ export async function getChatHistory(input: {
 }
 
 export function buildChatWsUrl(): string {
-  const envUrl = import.meta.env.VITE_CHAT_WS_URL;
-  if (envUrl) return envUrl;
-
   const access = getAccessToken() ?? "";
   const refresh = getRefreshToken() ?? "";
+  const query = new URLSearchParams();
+  if (access) query.set("token", access);
+  if (refresh) query.set("refresh_token", refresh);
+
+  const envUrl = import.meta.env.VITE_CHAT_WS_URL;
+  if (envUrl) {
+    const url = new URL(envUrl);
+    query.forEach((value, key) => url.searchParams.set(key, value));
+    return url.toString();
+  }
+
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   const host = window.location.host;
-  const query = new URLSearchParams({ token: access });
-  if (refresh) query.set("refresh_token", refresh);
-  // 开发期走 Vite 同域代理 /ws
   return `${proto}//${host}/ws?${query.toString()}`;
 }
 
 export function connectChatSocket(handlers: {
   onMessage: (msg: OutgoingSocketMessage) => void;
   onOpen?: () => void;
-  onClose?: () => void;
-  onError?: () => void;
+  onClose?: (ev: CloseEvent) => void;
+  onError?: (ev: Event) => void;
 }): WebSocket {
   const ws = new WebSocket(buildChatWsUrl());
   ws.addEventListener("open", () => handlers.onOpen?.());
-  ws.addEventListener("close", () => handlers.onClose?.());
-  ws.addEventListener("error", () => handlers.onError?.());
+  ws.addEventListener("close", (ev) => handlers.onClose?.(ev));
+  ws.addEventListener("error", (ev) => handlers.onError?.(ev));
   ws.addEventListener("message", (event) => {
     try {
       handlers.onMessage(JSON.parse(String(event.data)) as OutgoingSocketMessage);
