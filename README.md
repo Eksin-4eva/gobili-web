@@ -1,6 +1,7 @@
 # gobili-web
 
 gobili 视频站的 Web 前端。
+后端repo地址 https://github.com/Eksin-4eva/GoWork4
 
 ## 技术栈
 
