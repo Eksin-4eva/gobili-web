@@ -8,6 +8,7 @@ import VideoCard from "@/components/VideoCard";
 import { Avatar } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { upsertConversation } from "@/lib/conversations";
 
 export default function UserProfilePage() {
   const { id = "" } = useParams();
@@ -41,6 +42,7 @@ export default function UserProfilePage() {
           {me && me.id !== user.id ? (
             <Link
               to={`/messages/${user.id}`}
+              onClick={() => upsertConversation({ peerId: user.id })}
               className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm text-primary-foreground"
             >
               发私信

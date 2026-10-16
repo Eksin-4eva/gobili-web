@@ -1,6 +1,10 @@
 import { getAccessToken, getRefreshToken } from "@/lib/session";
 import { getJson } from "@/api/request";
-import type { OutgoingSocketMessage, PagedChatHistory } from "@/types/chat";
+import type {
+  OutgoingSocketMessage,
+  PagedChatHistory,
+  PagedConversations,
+} from "@/types/chat";
 
 const CHAT_BASE = (import.meta.env.VITE_CHAT_BASE_URL ?? "").replace(/\/$/, "");
 
@@ -19,6 +23,22 @@ export async function getChatHistory(input: {
     page_size: String(input.pageSize ?? 50),
   });
   const data = await getJson<PagedChatHistory>(chatUrl(`/history?${params.toString()}`));
+  return {
+    items: data?.items ?? [],
+    total: data?.total ?? 0,
+  };
+}
+
+
+export async function getConversations(input?: {
+  pageNum?: number;
+  pageSize?: number;
+}): Promise<PagedConversations> {
+  const params = new URLSearchParams({
+    page_num: String(input?.pageNum ?? 1),
+    page_size: String(input?.pageSize ?? 50),
+  });
+  const data = await getJson<PagedConversations>(chatUrl(`/conversations?${params.toString()}`));
   return {
     items: data?.items ?? [],
     total: data?.total ?? 0,

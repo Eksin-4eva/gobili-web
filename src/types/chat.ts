@@ -25,3 +25,18 @@ export type OutgoingSocketMessage =
       online?: boolean;
     }
   | { type: "error"; error?: string };
+
+
+export interface ConversationSummary {
+  peer_id: string;
+  room_id: string;
+  last_message_id: string;
+  last_content: string;
+  last_from_user_id: string;
+  last_at: string;
+}
+
+export interface PagedConversations {
+  items: ConversationSummary[];
+  total: number;
+}

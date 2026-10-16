@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "@/App";
+import ChatSocketProvider from "@/components/ChatSocketProvider";
 import TipProvider from "@/components/tip";
 import { CurrentUserProvider } from "@/hooks/useCurrentUser";
 import "./index.css";
@@ -20,10 +21,12 @@ createRoot(document.getElementById("app")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <CurrentUserProvider>
-        <TipProvider />
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <ChatSocketProvider>
+          <TipProvider />
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </ChatSocketProvider>
       </CurrentUserProvider>
     </QueryClientProvider>
   </StrictMode>,

@@ -23,6 +23,7 @@ export default defineConfig({
       "/comment": "http://127.0.0.1:8888",
       "/auth": "http://127.0.0.1:8888",
       "/history": "http://127.0.0.1:8889",
+      "/conversations": "http://127.0.0.1:8889",
       "/healthz": "http://127.0.0.1:8889",
       "/ws": {
         target: "ws://127.0.0.1:8889",

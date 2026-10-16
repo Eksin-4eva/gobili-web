@@ -4,7 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import AuthGuard from "@/components/AuthGuard";
 import PageLoading from "@/components/PageLoading";
 import UserMeta from "@/components/UserMeta";
-import { connectChatSocket, getChatHistory, sendChatMessage } from "@/api/chat";
+import { useChatSocket } from "@/components/ChatSocketProvider";
+import { getChatHistory } from "@/api/chat";
+import { peerIdFromMessage, upsertConversation } from "@/lib/conversations";
 import { $tip } from "@/components/tip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,18 +14,14 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { formatDateTime } from "@/lib/format";
 import type { ChatHistoryItem } from "@/types/chat";
 
-type ConnState = "connecting" | "connected" | "disconnected" | "error";
-
 function ChatRoom() {
   const { peerId = "" } = useParams();
   const { user } = useCurrentUser();
+  const { connState, sendMessage, subscribe } = useChatSocket();
   const [text, setText] = useState("");
   const [messages, setMessages] = useState<ChatHistoryItem[]>([]);
-  const [connState, setConnState] = useState<ConnState>("connecting");
-  const wsRef = useRef<WebSocket | null>(null);
-  const retryRef = useRef(0);
-  const timerRef = useRef<number | null>(null);
-  const unmountedRef = useRef(false);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const myId = user?.id ?? "";
 
   const historyQuery = useQuery({
     queryKey: ["chat-history", peerId],
@@ -32,90 +30,57 @@ function ChatRoom() {
   });
 
   useEffect(() => {
+    if (!peerId) return;
+    upsertConversation({ peerId });
+  }, [peerId]);
+
+  useEffect(() => {
     if (historyQuery.data) {
       setMessages([...(historyQuery.data.items ?? [])].reverse());
     }
   }, [historyQuery.data]);
 
   useEffect(() => {
-    unmountedRef.current = false;
-    if (!peerId) return;
+    if (!peerId || !myId) return;
 
-    const clearTimer = () => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
+    return subscribe((msg) => {
+      if (msg.type === "error") {
+        $tip(msg.error || "聊天错误", "error");
+        return;
       }
-    };
+      if (msg.type !== "message" && msg.type !== "ack") return;
+      if (!msg.id || !msg.content) return;
 
-    const scheduleReconnect = () => {
-      if (unmountedRef.current) return;
-      const attempt = retryRef.current;
-      retryRef.current = attempt + 1;
-      const delay = Math.min(10000, 1000 * 2 ** Math.min(attempt, 3));
-      timerRef.current = window.setTimeout(() => {
-        if (!unmountedRef.current) connect();
-      }, delay);
-    };
+      const inferredPeer =
+        peerIdFromMessage({
+          myUserId: myId,
+          fromUserId: msg.from_user_id,
+          toUserId: msg.to_user_id,
+        }) || "";
 
-    const connect = () => {
-      clearTimer();
-      if (unmountedRef.current) return;
-      setConnState("connecting");
+      // 只展示当前会话双方的消息
+      if (inferredPeer !== peerId) return;
 
-      const ws = connectChatSocket({
-        onOpen: () => {
-          retryRef.current = 0;
-          setConnState("connected");
-        },
-        onClose: () => {
-          if (unmountedRef.current) return;
-          setConnState((prev) => (prev === "error" ? prev : "disconnected"));
-          scheduleReconnect();
-        },
-        onError: () => {
-          if (unmountedRef.current) return;
-          setConnState("error");
-        },
-        onMessage: (msg) => {
-          if (msg.type === "connected") {
-            setConnState("connected");
-            return;
-          }
-          if (msg.type === "error") {
-            $tip(msg.error || "聊天错误", "error");
-            return;
-          }
-          if (msg.type === "message" || msg.type === "ack") {
-            if (!msg.id || !msg.content) return;
-            setMessages((prev) => {
-              if (prev.some((item) => item.id === msg.id)) return prev;
-              return [
-                ...prev,
-                {
-                  id: msg.id!,
-                  from_user_id: String(msg.from_user_id ?? ""),
-                  to_user_id: String(msg.to_user_id ?? ""),
-                  content: msg.content!,
-                  created_at: msg.sent_at ?? new Date().toISOString(),
-                },
-              ];
-            });
-          }
-        },
+      const createdAt = msg.sent_at ?? new Date().toISOString();
+      setMessages((prev) => {
+        if (prev.some((item) => item.id === msg.id)) return prev;
+        return [
+          ...prev,
+          {
+            id: msg.id!,
+            from_user_id: String(msg.from_user_id ?? ""),
+            to_user_id: String(msg.to_user_id ?? ""),
+            content: msg.content!,
+            created_at: createdAt,
+          },
+        ];
       });
-      wsRef.current = ws;
-    };
+    });
+  }, [peerId, myId, subscribe]);
 
-    connect();
-
-    return () => {
-      unmountedRef.current = true;
-      clearTimer();
-      wsRef.current?.close();
-      wsRef.current = null;
-    };
-  }, [peerId]);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const statusText = useMemo(() => {
     switch (connState) {
@@ -127,6 +92,8 @@ function ChatRoom() {
         return "已断开，正在重连...";
       case "error":
         return "连接失败，正在重试...";
+      case "idle":
+        return "未登录";
       default:
         return "连接中...";
     }
@@ -148,7 +115,7 @@ function ChatRoom() {
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-4">
         {messages.map((item) => {
-          const mine = item.from_user_id === user?.id;
+          const mine = item.from_user_id === myId;
           return (
             <div key={item.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
               <div
@@ -164,16 +131,18 @@ function ChatRoom() {
             </div>
           );
         })}
+        <div ref={bottomRef} />
       </div>
       <form
         className="flex gap-2 border-t border-border p-3"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!text.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          const content = text.trim();
+          if (!content) return;
+          if (!sendMessage({ toUserId: peerId, content })) {
             $tip("连接未就绪", "warning");
             return;
           }
-          sendChatMessage(wsRef.current, { toUserId: peerId, content: text.trim() });
           setText("");
         }}
       >
